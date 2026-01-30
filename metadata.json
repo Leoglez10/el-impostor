@@ -1,0 +1,5 @@
+{
+  "name": "El Impostor",
+  "description": "Un juego social para móviles donde un jugador es el impostor y debe adivinar la palabra secreta.",
+  "requestFramePermissions": []
+}
