@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Users, Lock, Dice5, Play, UserX, UserPen, ChevronDown, ChevronUp, AlertTriangle, Sparkles, Settings2, Grid2X2, OctagonAlert, BookOpen, X } from 'lucide-react';
-import { PALABRAS_ALEATORIAS, TEMAS, MIN_JUGADORES, MAX_JUGADORES } from '../constants';
+import { Users, Lock, Dice5, Play, UserX, UserPen, ChevronDown, ChevronUp, AlertTriangle, Sparkles, Settings2, Grid2X2, BookOpen } from 'lucide-react';
+import { TEMAS, MIN_JUGADORES, MAX_JUGADORES } from '../constants';
 import { generarPalabraConIA, ValidacionIA } from '../utils/gemini';
 import { soundManager } from '../utils/audio';
+import { seleccionarPalabraInteligente } from '../utils/wordSelector';
 
 interface PantallaInicioProps {
   onIniciarPartida: (numJugadores: number, numImpostores: number, palabra: string, nombres: string[]) => void;
@@ -88,16 +89,15 @@ const PantallaInicio: React.FC<PantallaInicioProps> = ({ onIniciarPartida, onOpe
   const cancelarAdultos = () => {
     setWarningAdultosPaso1(false);
     setWarningAdultosPaso2(false);
-    if (temaSeleccionado !== 'ADULTOS') {
-    } else {
+    if (temaSeleccionado === 'ADULTOS') {
       setTemaSeleccionado('ANIMALES');
     }
   };
 
   const generarPalabraAleatoriaManual = () => {
     soundManager.playClick();
-    const indice = Math.floor(Math.random() * PALABRAS_ALEATORIAS.length);
-    setPalabraManual(PALABRAS_ALEATORIAS[indice]);
+    const palabra = seleccionarPalabraInteligente();
+    setPalabraManual(palabra);
     setError('');
   };
 
@@ -129,12 +129,9 @@ const PantallaInicio: React.FC<PantallaInicioProps> = ({ onIniciarPartida, onOpe
       palabraFinal = palabraManual;
     } else {
       if (tipoOculta === 'azar') {
-        const indice = Math.floor(Math.random() * PALABRAS_ALEATORIAS.length);
-        palabraFinal = PALABRAS_ALEATORIAS[indice];
+        palabraFinal = seleccionarPalabraInteligente();
       } else if (tipoOculta === 'tema') {
-        const listaTema = (TEMAS as any)[temaSeleccionado];
-        const indice = Math.floor(Math.random() * listaTema.length);
-        palabraFinal = listaTema[indice];
+        palabraFinal = seleccionarPalabraInteligente(temaSeleccionado);
       } else if (tipoOculta === 'ia') {
         setLoadingIA(true);
         try {
@@ -327,7 +324,7 @@ const PantallaInicio: React.FC<PantallaInicioProps> = ({ onIniciarPartida, onOpe
 
               {tipoOculta === 'azar' && (
                  <div className="p-4 bg-white dark:bg-slate-900/50 rounded-lg text-center text-sm text-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700 font-semibold shadow-sm">
-                    Se elegirá una palabra de cualquier categoría.
+                    Se elegirá una palabra inteligente evitando repeticiones.
                  </div>
               )}
 
@@ -445,7 +442,53 @@ const PantallaInicio: React.FC<PantallaInicioProps> = ({ onIniciarPartida, onOpe
         </div>
       )}
 
-      {/* Reglas y Advertencias Adultos omitidas por brevedad, se mantienen igual */}
+      {/* Warning Adultos Paso 1 */}
+      {warningAdultosPaso1 && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={cancelarAdultos}></div>
+           <div className="relative bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-sm text-center border-4 border-red-600 shadow-[0_0_50px_rgba(239,68,68,0.3)] space-y-6">
+              <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto ring-4 ring-red-500/20">
+                 <AlertTriangle className="w-12 h-12 text-red-600" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-3xl font-black text-red-600 uppercase tracking-tighter">¡ALTO AHÍ!</h2>
+                <p className="text-slate-900 dark:text-white font-bold text-lg leading-tight">
+                  Has seleccionado el modo ADULTOS (+18).
+                </p>
+                <p className="text-slate-600 dark:text-slate-400 text-sm font-semibold">
+                  Este modo contiene palabras explícitas y contenido sexual.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3">
+                 <button onClick={confirmarAdultos1} className="w-full py-4 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 transition-colors">SOY MAYOR DE EDAD</button>
+                 <button onClick={cancelarAdultos} className="w-full py-3 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white font-bold rounded-xl">CANCELAR</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Warning Adultos Paso 2 */}
+      {warningAdultosPaso2 && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={cancelarAdultos}></div>
+           <div className="relative bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-sm text-center border-4 border-orange-500 shadow-[0_0_50px_rgba(249,115,22,0.3)] space-y-6">
+              <div className="w-20 h-20 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto">
+                 <Lock className="w-10 h-10 text-orange-600" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-black text-orange-600 uppercase tracking-tighter italic">¿ÚLTIMA PALABRA?</h2>
+                <p className="text-slate-900 dark:text-white font-bold text-base">
+                  No nos hacemos responsables de las caras de vergüenza de tus amigos.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3">
+                 <button onClick={confirmarAdultos2} className="w-full py-4 bg-orange-600 text-white font-black rounded-xl hover:bg-orange-700 transition-colors">CONFIRMAR MODO PICANTE</button>
+                 <button onClick={cancelarAdultos} className="w-full py-3 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white font-bold rounded-xl">MEJOR NO...</button>
+              </div>
+           </div>
+        </div>
+      )}
+
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes shake {
           0%, 100% { transform: translateX(0); }

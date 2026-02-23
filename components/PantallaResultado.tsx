@@ -1,6 +1,7 @@
 
-import React from 'react';
-import { CheckCircle2, XCircle, RotateCcw, UserX, ArrowLeft, Search } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { CheckCircle2, XCircle, RotateCcw, UserX, ArrowLeft, Search, Volume2, Mic2 } from 'lucide-react';
+import { soundManager } from '../utils/audio';
 
 interface PantallaResultadoProps {
   nombreVotado: string;
@@ -25,6 +26,7 @@ const PantallaResultado: React.FC<PantallaResultadoProps> = ({
   impostoresEncontradosCount,
   totalImpostores
 }) => {
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   // Lógica de finalización:
   const todosEncontrados = impostoresEncontradosCount >= totalImpostores;
@@ -33,6 +35,28 @@ const PantallaResultado: React.FC<PantallaResultadoProps> = ({
   const juegoTerminado = todosEncontrados || sinIntentos;
   const esVictoriaFinal = todosEncontrados;
   const faltantes = totalImpostores - impostoresEncontradosCount;
+
+  const anunciarResultado = async () => {
+    if (isSpeaking || !juegoTerminado) return;
+    setIsSpeaking(true);
+    try {
+      await soundManager.announceGameResult(esVictoriaFinal, nombresImpostores);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSpeaking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (juegoTerminado) {
+      // Aumentamos a 1.5 segundos para que el efecto de sonido (Win/Loss) termine de sonar bien
+      const timer = setTimeout(() => {
+        anunciarResultado();
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [juegoTerminado]);
 
   return (
     <div className="flex flex-col items-center justify-center w-full max-w-sm px-6 text-center space-y-8 animate-[fadeIn_0.5s_ease-out] py-6">
@@ -84,7 +108,7 @@ const PantallaResultado: React.FC<PantallaResultadoProps> = ({
 
       {/* Revelación Final (Solo si acaba el juego) */}
       {juegoTerminado && (
-        <div className="w-full bg-white dark:bg-slate-800/80 p-6 rounded-2xl border-2 border-slate-300 dark:border-slate-700 space-y-4 shadow-xl">
+        <div className="w-full bg-white dark:bg-slate-800/80 p-6 rounded-2xl border-2 border-slate-300 dark:border-slate-700 space-y-4 shadow-xl relative overflow-hidden group">
           
           <div className="space-y-1">
             <span className="text-xs uppercase tracking-wider text-slate-600 dark:text-slate-500 font-black">Palabra Secreta</span>
@@ -94,10 +118,20 @@ const PantallaResultado: React.FC<PantallaResultadoProps> = ({
           </div>
 
           <div className="space-y-3 pt-3 border-t-2 border-slate-200 dark:border-slate-700">
-            <span className="text-xs uppercase tracking-wider text-red-700 dark:text-brand-danger font-black flex items-center justify-center gap-1">
-              <UserX className="w-4 h-4" />
-              Todos los Impostores
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-wider text-red-700 dark:text-brand-danger font-black flex items-center gap-1">
+                <UserX className="w-4 h-4" />
+                Los Impostores eran
+              </span>
+              <button 
+                onClick={anunciarResultado}
+                disabled={isSpeaking}
+                className={`p-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg transition-all active:scale-90 ${isSpeaking ? 'animate-pulse text-blue-600' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'}`}
+                title="Repetir anuncio final"
+              >
+                {isSpeaking ? <Mic2 className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              </button>
+            </div>
             <div className="flex flex-wrap gap-2 justify-center">
               {nombresImpostores.map((imp, idx) => (
                 <span key={idx} className="bg-red-100 dark:bg-brand-danger/20 text-red-800 dark:text-brand-danger border border-red-200 dark:border-brand-danger/30 px-3 py-1 rounded-full font-bold">

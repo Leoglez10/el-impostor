@@ -34,6 +34,7 @@ async function decodeAudioData(
 class SoundManager {
   private context: AudioContext | null = null;
   private volume: number = 0.3;
+  private activeSource: AudioBufferSourceNode | null = null;
 
   private initContext() {
     if (!this.context) {
@@ -43,6 +44,20 @@ class SoundManager {
       this.context.resume();
     }
     return this.context;
+  }
+
+  /**
+   * Detiene cualquier audio de voz (TTS) que se esté reproduciendo actualmente
+   */
+  private stopActiveVoice() {
+    if (this.activeSource) {
+      try {
+        this.activeSource.stop();
+      } catch (e) {
+        // Ya estaba detenido
+      }
+      this.activeSource = null;
+    }
   }
 
   private playTone(freq: number, type: OscillatorType, duration: number, startTime: number = 0) {
@@ -99,10 +114,11 @@ class SoundManager {
    * Anuncia al jugador inicial usando Gemini TTS
    */
   async announceStartingPlayer(nombre: string) {
+    this.stopActiveVoice();
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
     
     try {
-      const prompt = `Di con entusiasmo y energía: ¡El debate comienza! El primer turno es para ${nombre}. ¡A jugar!`;
+      const prompt = `Di rápido: ¡Debate iniciado! Empieza ${nombre}.`;
       
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
@@ -111,7 +127,7 @@ class SoundManager {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Kore' }, // Kore tiene un tono amigable y profesional
+              prebuiltVoiceConfig: { voiceName: 'Kore' }, 
             },
           },
         },
@@ -121,29 +137,94 @@ class SoundManager {
       
       if (base64Audio) {
         const ctx = this.initContext();
-        const audioBuffer = await decodeAudioData(
-          decode(base64Audio),
-          ctx,
-          24000,
-          1,
-        );
+        const audioBuffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1);
         
         const source = ctx.createBufferSource();
         const gainNode = ctx.createGain();
-        gainNode.gain.value = 0.8; // Volumen más alto para la voz
+        gainNode.gain.value = 0.8; 
         
         source.buffer = audioBuffer;
         source.connect(gainNode);
         gainNode.connect(ctx.destination);
+        
+        this.activeSource = source;
         source.start();
         
         return new Promise((resolve) => {
-          source.onended = resolve;
+          source.onended = () => {
+            if (this.activeSource === source) this.activeSource = null;
+            resolve(true);
+          };
         });
       }
     } catch (error) {
       console.error("Error en Gemini TTS:", error);
-      // Fallback: Si falla Gemini, no interrumpimos el juego
+    }
+  }
+
+  /**
+   * Anuncia el resultado final con textos acortados y precisos.
+   */
+  async announceGameResult(esVictoria: boolean, nombresImpostores: string[]) {
+    this.stopActiveVoice(); 
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+    
+    let listaNombres = "";
+    if (nombresImpostores.length === 1) {
+      listaNombres = nombresImpostores[0];
+    } else {
+      const ultimo = nombresImpostores[nombresImpostores.length - 1];
+      const resto = nombresImpostores.slice(0, -1).join(", ");
+      listaNombres = `${resto} y ${ultimo}`;
+    }
+
+    const esPlural = nombresImpostores.length > 1;
+    
+    try {
+      // Frases acortadas según lo solicitado
+      const prompt = esVictoria 
+        ? `Di rápido y directo: ¡Ganaron los ciudadanos! Encontraron ${esPlural ? 'a los impostores que fueron' : 'al impostor que fue'} ${listaNombres}.`
+        : `Di rápido y directo: ¡Ganaron los impostores! ${esPlural ? 'Los impostores eran' : 'El impostor era'} ${listaNombres}.`;
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text: prompt }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: 'Kore' }, 
+            },
+          },
+        },
+      });
+
+      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      
+      if (base64Audio) {
+        const ctx = this.initContext();
+        const audioBuffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1);
+        
+        const source = ctx.createBufferSource();
+        const gainNode = ctx.createGain();
+        gainNode.gain.value = 0.9; 
+        
+        source.buffer = audioBuffer;
+        source.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        this.activeSource = source;
+        source.start();
+        
+        return new Promise((resolve) => {
+          source.onended = () => {
+            if (this.activeSource === source) this.activeSource = null;
+            resolve(true);
+          };
+        });
+      }
+    } catch (error) {
+      console.error("Error en Gemini TTS:", error);
     }
   }
 }
